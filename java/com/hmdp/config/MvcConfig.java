@@ -26,7 +26,13 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/shop-type/**",
                         "/blog/hot",
                         "/user/login",
-                        "/user/code"
+                        "/user/code",
+                        // Knife4j相关路径
+                        "/doc.html",
+                        "/webjars/**",
+                        "/swagger-resources/**",
+                        "/v2/api-docs",
+                        "/favicon.ico"
 
                 ).order(1);
 

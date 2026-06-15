@@ -7,6 +7,8 @@ import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
 import com.hmdp.utils.SystemConstants;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -20,6 +22,7 @@ import javax.annotation.Resource;
  * @since 2021-12-22
  */
 @RestController
+@Api(tags = "商铺相关接口")
 @RequestMapping("/shop")
 public class ShopController {
 
@@ -33,7 +36,7 @@ public class ShopController {
      */
     @GetMapping("/{id}")
     public Result queryShopById(@PathVariable("id") Long id) {
-        return Result.ok(shopService.getById(id));
+        return shopService.queryById(id);
     }
 
     /**
@@ -55,10 +58,10 @@ public class ShopController {
      * @return 无
      */
     @PutMapping
+    @ApiOperation("更新商铺")
     public Result updateShop(@RequestBody Shop shop) {
         // 写入数据库
-        shopService.updateById(shop);
-        return Result.ok();
+        return shopService.update(shop);
     }
 
     /**
