@@ -4,6 +4,8 @@ package com.hmdp.controller;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Voucher;
 import com.hmdp.service.IVoucherService;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -16,6 +18,7 @@ import javax.annotation.Resource;
  * @author 虎哥
  * @since 2021-12-22
  */
+@Api(tags = "优惠券相关接口")
 @RestController
 @RequestMapping("/voucher")
 public class VoucherController {
@@ -39,6 +42,7 @@ public class VoucherController {
      * @param voucher 优惠券信息，包含秒杀信息
      * @return 优惠券id
      */
+    @ApiOperation("新增秒杀券")
     @PostMapping("seckill")
     public Result addSeckillVoucher(@RequestBody Voucher voucher) {
         voucherService.addSeckillVoucher(voucher);
