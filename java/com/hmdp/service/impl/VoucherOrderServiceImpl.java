@@ -1,5 +1,6 @@
 package com.hmdp.service.impl;
 
+import com.baomidou.mybatisplus.extension.conditions.query.QueryChainWrapper;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.SeckillVoucher;
 import com.hmdp.entity.VoucherOrder;
@@ -9,6 +10,7 @@ import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
 import com.hmdp.utils.UserHolder;
+import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +32,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private RedisIdWorker redisIdWorker;
     @Override
-    @Transactional
     public Result seckillVoucher(Long voucherId) {
         //1.查询优惠券信息
         SeckillVoucher seckillVoucher = seckillVoucherService.getById(voucherId);
@@ -44,6 +45,22 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //3.判断库存是否充足
         if (seckillVoucher.getStock() < 1) {
             return Result.fail("库存不足");
+        }
+        Long userId = UserHolder.getUser().getId();
+        synchronized (userId.toString().intern()){ // 考虑上锁的范围，需要对方法上锁，因为不对方法上锁，在方法结束时，事务没提交时，还是有可能别的线程进入查询，引发线程并发安全。
+            IVoucherOrderService proxy = (IVoucherOrderService)AopContext.currentProxy();
+            return proxy.createVoucherOrder(voucherId);
+        }
+
+    }
+    @Transactional
+    public Result createVoucherOrder(Long voucherId) {
+        //一人一单实现：查询id号和voucherid对应的订单是否存在
+        Long userId = UserHolder.getUser().getId();
+        int count = query().eq("user_id", userId).eq("voucher_id", voucherId).count();
+        if(count > 0){
+            //用户下过单了
+            return Result.fail("用户已经购买过一次！");
         }
         //4.扣减库存
         boolean success = seckillVoucherService.update()//开始创建更新语句
