@@ -11,13 +11,19 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
 import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
+import org.redisson.Redisson;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.Collections;
 
 /**
  * <p>
@@ -35,44 +41,30 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private RedisIdWorker redisIdWorker;
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+    @Resource
+    private RedissonClient redissonClient;
+    private static final DefaultRedisScript<Long> SECKILL_SCRIPT;
+    static{
+        SECKILL_SCRIPT = new DefaultRedisScript<>();
+        SECKILL_SCRIPT.setLocation(new ClassPathResource("seckill.lua"));
+        SECKILL_SCRIPT.setResultType(Long.class);
+    }
     @Override
     public Result seckillVoucher(Long voucherId) {
-        //1.查询优惠券信息
-        SeckillVoucher seckillVoucher = seckillVoucherService.getById(voucherId);
-        //2.判断时间是否在合理范围
-        if (seckillVoucher.getBeginTime().isAfter(LocalDateTime.now())) {
-            return Result.fail("秒杀活动未开始");
-        }
-        if (seckillVoucher.getEndTime().isBefore(LocalDateTime.now())) {
-            return Result.fail("秒杀活动已经结束");
-        }
-        //3.判断库存是否充足
-        if (seckillVoucher.getStock() < 1) {
-            return Result.fail("库存不足");
-        }
+        //1.执行lua脚本
         Long userId = UserHolder.getUser().getId();
-        //分布式锁
-        //创建锁对象
-        SimpleRedisLock simpleRedisLock = new SimpleRedisLock();
-        simpleRedisLock.setName("order:" + userId);
-        simpleRedisLock.setStringRedisTemplate(stringRedisTemplate);
-        boolean trylock = simpleRedisLock.trylock(1200);
-        if(!trylock){
-            return Result.fail("一个人只允许下一单");
+        Long result = stringRedisTemplate.execute(SECKILL_SCRIPT
+                , Collections.emptyList()
+                , voucherId.toString(), userId.toString());
+        //2.判断结果是否为0
+        int i = result.intValue();
+        if(i != 0){
+            return Result.fail(i == 1 ? "库存不足" : "不能重复下单");
         }
-        try {
-            IVoucherOrderService proxy = (IVoucherOrderService)AopContext.currentProxy();
-            return proxy.createVoucherOrder(voucherId);
-        } finally {
-            simpleRedisLock.unlock();
-        }
-
-
-        //----------
-//        synchronized (userId.toString().intern()){ // 考虑上锁的范围，需要对方法上锁，因为不对方法上锁，在方法结束时，事务没提交时，还是有可能别的线程进入查询，引发线程并发安全。
-//            IVoucherOrderService proxy = (IVoucherOrderService)AopContext.currentProxy();
-//            return proxy.createVoucherOrder(voucherId);
-//        }
+        //2.2为0，有购买资格,保存下单信息到阻塞队列
+        long orderId = redisIdWorker.nextId("order");
+        //返回订单id
+        return Result.ok(orderId);
 
     }
     @Transactional
@@ -103,4 +95,48 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         save(voucherOrder);
         return Result.ok(id);
     }
+//    @Override
+//    public Result seckillVoucher(Long voucherId) {
+//        //1.查询优惠券信息
+//        SeckillVoucher seckillVoucher = seckillVoucherService.getById(voucherId);
+//        //2.判断时间是否在合理范围
+//        if (seckillVoucher.getBeginTime().isAfter(LocalDateTime.now())) {
+//            return Result.fail("秒杀活动未开始");
+//        }
+//        if (seckillVoucher.getEndTime().isBefore(LocalDateTime.now())) {
+//            return Result.fail("秒杀活动已经结束");
+//        }
+//        //3.判断库存是否充足
+//        if (seckillVoucher.getStock() < 1) {
+//            return Result.fail("库存不足");
+//        }
+//        Long userId = UserHolder.getUser().getId();
+//        //分布式锁
+//        //创建锁对象
+////        SimpleRedisLock simpleRedisLock = new SimpleRedisLock();
+////        simpleRedisLock.setName("order:" + userId);
+////        simpleRedisLock.setStringRedisTemplate(stringRedisTemplate);
+//        //利用Redisson
+//        RLock lock = redissonClient.getLock("lock:order:" + userId);
+//        boolean trylock = lock.tryLock();
+////        boolean trylock = simpleRedisLock.trylock(1200);
+//        if(!trylock){
+//            return Result.fail("一个人只允许下一单");
+//        }
+//        try {
+//            IVoucherOrderService proxy = (IVoucherOrderService)AopContext.currentProxy();
+//            return proxy.createVoucherOrder(voucherId);
+//        } finally {
+////            simpleRedisLock.unlock();
+//            lock.unlock();
+//        }
+//
+//
+//        //----------
+////        synchronized (userId.toString().intern()){ // 考虑上锁的范围，需要对方法上锁，因为不对方法上锁，在方法结束时，事务没提交时，还是有可能别的线程进入查询，引发线程并发安全。
+////            IVoucherOrderService proxy = (IVoucherOrderService)AopContext.currentProxy();
+////            return proxy.createVoucherOrder(voucherId);
+////        }
+//
+//    }
 }
