@@ -118,7 +118,7 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         List<Long> ids = range.stream().map(Long::valueOf).collect(Collectors.toList());
         String idStr = StrUtil.join(",", ids);
         //List<User> users = iUserService.listByIds(ids); //这一步中，查询id where id in (5,1)，查询顺序是反的
-        List<User> users = iUserService.query().in("id", ids).last("ORDER BY FIELD(id" + id + ")").list();
+        List<User> users = iUserService.query().in("id", ids).last("ORDER BY FIELD(id," + id + ")").list();
         List<UserDTO> collect = users.stream().map(user -> {
             return BeanUtil.copyProperties(user, UserDTO.class);
         }).collect(Collectors.toList());

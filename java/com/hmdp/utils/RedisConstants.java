@@ -23,4 +23,6 @@ public class RedisConstants {
 
     public static final String CACHE_SHOPTYPE_KEY = "cache:shop_type";
 
+    public static final String FOLLOW_USER_KEY = "follows:";
+
 }
