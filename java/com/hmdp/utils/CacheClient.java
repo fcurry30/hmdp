@@ -103,6 +103,7 @@ public class CacheClient {
             //获取互斥锁成功，再次检查Redis里的逻辑过期时间是否过期（因为可能已经被重建了）
             String shopJson1 = stringRedisTemplate.opsForValue().get(key);
             if(StrUtil.isBlank(shopJson1)){
+                this.unlock(lockKey);
                 return null;
             }
             RedisData data1 = JSONUtil.toBean(shopJson1, RedisData.class);
@@ -110,6 +111,7 @@ public class CacheClient {
             LocalDateTime expireTime1 = data1.getExpireTime();
             if(expireTime1.isAfter(LocalDateTime.now())){
                 //未过期，直接返回店铺信息
+                this.unlock(lockKey);
                 return r1;
             }
             //检查完成，还是过期，开启独立线程（用线程池去做）
