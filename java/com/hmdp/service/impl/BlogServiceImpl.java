@@ -151,7 +151,6 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         r.setOffset(os);
         r.setMinTime(minTime);
         return Result.ok(r);
-        //TODO 2026/06/29 已完成关注博主推送博客功能，附近商户开始。
     }
 
     /**
