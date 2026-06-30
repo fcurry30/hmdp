@@ -14,17 +14,24 @@ import com.hmdp.service.IUserService;
 import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RegexUtils;
 import com.hmdp.utils.SystemConstants;
+import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+
+import static com.hmdp.utils.RedisConstants.USER_SIGN_KEY;
 
 /**
  * <p>
@@ -59,6 +66,58 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         stringRedisTemplate.opsForValue().set(RedisConstants.LOGIN_CODE_KEY + phone,code,RedisConstants.LOGIN_CODE_TTL, TimeUnit.MINUTES);
         //5.发送验证码
         log.debug("发送短信验证码成功，验证码:{}",code);
+        return Result.ok();
+    }
+
+    @Override
+    public Result signCount() {
+        Long userId = UserHolder.getUser().getId();
+        LocalDateTime now = LocalDateTime.now();
+        String format = now.format(DateTimeFormatter.ofPattern(":yyyy/MM"));
+        String key = USER_SIGN_KEY + userId + format;
+        int dayOfMonth = now.getDayOfMonth();
+        //获取本月截至今天为止的的签到记录,返回的是十进制数字 BITFIELD sing:xx:yyyy/MM
+        List<Long> longs = stringRedisTemplate.opsForValue()
+                .bitField(key, BitFieldSubCommands.create()
+                        .get(BitFieldSubCommands.BitFieldType.unsigned(dayOfMonth)).valueAt(0));
+        if(longs == null || longs.isEmpty()){
+            return Result.ok(0);//第一次判断边界条件
+        }
+        Long l = longs.get(0);
+        if(l == null || l == 0){
+            return Result.ok(0);//第二次判断边界条件
+        }
+        int count = 0;
+        //循环遍历,让该数字与1做与运算，得到数字的最后一个bit位
+        while (true){
+            if((l & 1) == 0){
+                //未签到，结束循环
+                break;
+            }else{
+                count++;
+                l >>>= 1;
+            }
+        }
+        //如果为0，未签到，结束，不为0，计数器+1，数字右移一位，抛弃最后一位，继续循环
+        return Result.ok(count);
+    }
+
+    /**
+     * 签到功能实现
+     * @return
+     */
+    @Override
+    public Result sign() {
+        //1.获取当前用户的信息（作为key）
+        Long userId = UserHolder.getUser().getId();
+        //2.获取日期
+        LocalDateTime now = LocalDateTime.now();
+        String format = now.format(DateTimeFormatter.ofPattern(":yyyy/MM"));
+        String key = USER_SIGN_KEY + userId + format;//再来个sign:作为前缀
+        int dayOfMonth = now.getDayOfMonth();
+        dayOfMonth -= 1;
+        //写入bitmap
+        stringRedisTemplate.opsForValue().setBit(key,dayOfMonth,true);
         return Result.ok();
     }
 
